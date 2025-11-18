@@ -48,6 +48,7 @@
       box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
       border: 1px solid #111827;
       margin-bottom: 1.25rem;
+      flex-wrap: wrap;
     }
 
     .stat {
@@ -122,14 +123,36 @@
       padding: 0.35rem 0.75rem;
       color: #9ca3af;
       font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
     }
 
-    .speed-select select {
-      background: transparent;
+    .speed-select label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .speed-select input {
+      width: 4rem;
+      border-radius: 999px;
       border: none;
-      color: inherit;
-      font: inherit;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.85rem;
+      text-align: right;
       outline: none;
+    }
+
+    .speed-select input::selection {
+      background: rgba(37, 99, 235, 0.5);
+    }
+
+    .speed-unit {
+      color: #6b7280;
+      font-size: 0.75rem;
     }
 
     .grid {
@@ -139,7 +162,7 @@
       padding-top: 0.5rem;
     }
 
-    /* These are the “ads” uBlock / other blockers may hide using cosmetic rules */
+    /* Fake “ad” blocks */
     .ad,
     .banner-ad,
     .advertisement,
@@ -283,13 +306,10 @@
         </button>
 
         <div class="speed-select">
-          <label for="speed">
+          <label for="rate">
             Speed:
-            <select id="speed">
-              <option value="1000">Chill (1 / sec)</option>
-              <option value="200">Fast (5 / sec)</option>
-              <option value="50">Absurd (20 / sec)</option>
-            </select>
+            <input id="rate" type="number" min="0.1" step="0.1" value="20" />
+            <span class="speed-unit">ads / sec</span>
           </label>
         </div>
       </div>
@@ -329,7 +349,7 @@
     const adCountEl = document.getElementById("ad-count");
     const startBtn = document.getElementById("start");
     const stopBtn = document.getElementById("stop");
-    const speedSelect = document.getElementById("speed");
+    const rateInput = document.getElementById("rate");
 
     const ruleInput = document.getElementById("ublock-rule");
     const copyBtn = document.getElementById("copy-rule");
@@ -354,7 +374,6 @@
     function createFakeAd() {
       const ad = document.createElement("article");
 
-      // add multiple “ad-like” classes so cosmetic filters can target them
       ad.className = "ad banner-ad advertisement sponsored";
 
       const label = document.createElement("div");
@@ -377,21 +396,31 @@
       ad.appendChild(body);
       ad.appendChild(pill);
 
-      adContainer.prepend(ad); // newest at top
+      adContainer.prepend(ad);
 
       adCount++;
       adCountEl.textContent = adCount.toLocaleString();
 
-      // trim DOM a bit so it doesn't grow unbounded
       if (adContainer.children.length > 400) {
         adContainer.removeChild(adContainer.lastChild);
       }
     }
 
+    function getDelayFromRate() {
+      let rate = parseFloat(rateInput.value);
+      if (!isFinite(rate) || rate <= 0) {
+        rate = 1; // safe fallback
+      }
+
+      // Clamp to a reasonable range so the browser doesn't die
+      const clamped = Math.min(Math.max(rate, 0.1), 500); // 0.1–500 ads/sec
+      return 1000 / clamped;
+    }
+
     function startSpamming() {
       if (intervalId !== null) return;
 
-      const delay = parseInt(speedSelect.value, 10) || 1000;
+      const delay = getDelayFromRate();
       intervalId = setInterval(createFakeAd, delay);
 
       startBtn.disabled = true;
@@ -409,24 +438,22 @@
 
     startBtn.addEventListener("click", startSpamming);
     stopBtn.addEventListener("click", stopSpamming);
-    speedSelect.addEventListener("change", () => {
-      // if already running, restart with new speed
+
+    // If speed changes while running, restart with new delay
+    rateInput.addEventListener("change", () => {
       if (intervalId !== null) {
         stopSpamming();
         startSpamming();
       }
     });
 
-    // create a few initial ads so the page isn’t empty
+    // Initial fake ads
     for (let i = 0; i < 12; i++) {
       createFakeAd();
     }
 
     // ----- uBlock field logic -----
-
-    // Build a cosmetic filter scoped to this domain
     const domain = location.hostname || "example.com";
-    // uBO cosmetic syntax: domain##selector
     const filterRule = `${domain}##.ad, .banner-ad, .advertisement, .sponsored`;
     ruleInput.value = filterRule;
 
@@ -442,6 +469,9 @@
         }
 
         copyStatus.style.display = "inline";
+        copyStatus.textContent = "Copied!";
+        copyStatus.style.color = "#22c55e";
+
         setTimeout(() => {
           copyStatus.style.display = "none";
         }, 1200);
